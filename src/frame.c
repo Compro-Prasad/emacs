@@ -1419,7 +1419,7 @@ do_switch_frame (Lisp_Object frame, int track, int for_deletion, Lisp_Object nor
   /* We want to make sure that the next event generates a frame-switch
      event to the appropriate frame.  This seems kludgy to me, but
      before you take it out, make sure that evaluating something like
-     (select-window (frame-root-window (new-frame))) doesn't end up
+     (select-window (frame-root-window (make-frame))) doesn't end up
      with your typing being interpreted in the new frame instead of
      the one you're actually typing in.  */
 #ifdef HAVE_WINDOW_SYSTEM
@@ -1935,6 +1935,7 @@ delete_frame (Lisp_Object frame, Lisp_Object force)
   if (f == sf)
     {
       Lisp_Object tail;
+      Lisp_Object frame1 UNINIT;  /* This line works around GCC bug 85563.  */
       eassume (CONSP (Vframe_list));
 
       /* Look for another visible frame on the same terminal.

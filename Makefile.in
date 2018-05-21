@@ -1163,6 +1163,7 @@ check-declare:
 	  exit 1; \
 	fi
 	$(MAKE) -C lisp $@
+	$(MAKE) -C test $@
 
 .PHONY: gitmerge
 

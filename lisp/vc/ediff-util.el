@@ -39,9 +39,6 @@
 
 (defvar ediff-after-quit-hook-internal nil)
 
-(eval-and-compile
-  (unless (fboundp 'declare-function) (defmacro declare-function (&rest  _r))))
-
 ;; end pacifier
 
 
@@ -347,7 +344,7 @@ to invocation.")
 	      (goto-char (point-min))
 	      (funcall (ediff-with-current-buffer buf major-mode))
 	      (widen) ; merge buffer is always widened
-	      (add-hook 'local-write-file-hooks 'ediff-set-merge-mode nil t)
+	      (add-hook 'write-file-functions 'ediff-set-merge-mode nil t)
 	      )))
       (setq buffer-read-only nil
 	    ediff-buffer-A buffer-A
@@ -778,8 +775,8 @@ Reestablish the default window display."
 	  (select-frame-set-input-focus ediff-control-frame)
 	(raise-frame ediff-control-frame)
 	(select-frame ediff-control-frame)
-	(if (fboundp 'focus-frame)
-	    (focus-frame ediff-control-frame))))
+	(and (featurep 'xemacs) (fboundp 'focus-frame)
+	     (focus-frame ediff-control-frame))))
 
   ;; Redisplay whatever buffers are showing, if there is a selected difference
   (let ((control-frame ediff-control-frame)

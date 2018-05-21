@@ -607,7 +607,8 @@ Don't try to split prefixes that are already longer than that.")
                       nil))))
               prefixes)))
         `(if (fboundp 'register-definition-prefixes)
-             (register-definition-prefixes ,file ',(delq nil strings)))))))
+             (register-definition-prefixes ,file ',(sort (delq nil strings)
+							 'string<)))))))
 
 (defun autoload--setup-output (otherbuf outbuf absfile load-name)
   (let ((outbuf
@@ -1144,9 +1145,6 @@ write its autoloads into the specified file instead."
       ;; In case autoload entries were added to other files because of
       ;; file-local autoload-generated-file settings.
       (autoload-save-buffers))))
-
-(define-obsolete-function-alias 'update-autoloads-from-directories
-    'update-directory-autoloads "22.1")
 
 ;;;###autoload
 (defun batch-update-autoloads ()

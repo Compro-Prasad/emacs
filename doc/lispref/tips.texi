@@ -316,7 +316,7 @@ any context prevents recognition of escape sequences as function keys in
 that context.
 
 @item
-Similarly, don't bind a key sequence ending in @key{C-g}, since that
+Similarly, don't bind a key sequence ending in @kbd{C-g}, since that
 is commonly used to cancel a key sequence.
 
 @item
@@ -1043,7 +1043,8 @@ the place to write arbitrary keywords that describe their package,
 rather than just the relevant Finder keywords.
 
 @item Homepage
-This line states the homepage of the library.
+@itemx URL
+These lines state the homepage of the library.
 
 @item Package-Version
 If @samp{Version} is not suitable for use by the package manager, then

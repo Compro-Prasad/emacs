@@ -487,7 +487,7 @@ inconsistent with the state of the terminal understood by the
 inferior process.  Only the process filter is allowed to make
 changes to the buffer.
 
-Customize this option to nil if you want the previous behaviour."
+Customize this option to nil if you want the previous behavior."
   :version "26.1"
   :type 'boolean
   :group 'term)
@@ -508,7 +508,7 @@ commands can be invoked on the mouse-selected point or region,
 until the process filter (or user) moves point to the process
 mark once again.
 
-Customize this option to nil if you want the previous behaviour."
+Customize this option to nil if you want the previous behavior."
   :version "26.1"
   :type 'boolean
   :group 'term)
@@ -598,8 +598,8 @@ This is run before the process is cranked up."
   "Called each time a process is exec'd by `term-exec'.
 This is called after the process is cranked up.  It is useful for things that
 must be done each time a process is executed in a term mode buffer (e.g.,
-`process-kill-without-query').  In contrast, `term-mode-hook' is only
-executed once when the buffer is created."
+`set-process-query-on-exit-flag').  In contrast, `term-mode-hook' is only
+executed once, when the buffer is created."
   :type 'hook
   :group 'term)
 
@@ -1138,6 +1138,11 @@ Entry to this mode runs the hooks on `term-mode-hook'."
       (setq term-current-row nil)
       (setq term-current-column nil)
       (term-set-scroll-region 0 height)
+      ;; `term-set-scroll-region' causes these to be set, we have to
+      ;; clear them again since we're changing point (Bug#30544).
+      (setq term-start-line-column nil)
+      (setq term-current-row nil)
+      (setq term-current-column nil)
       (goto-char point))))
 
 ;; Recursive routine used to check if any string in term-kill-echo-list
@@ -1451,6 +1456,9 @@ The main purpose is to get rid of the local keymap."
   (let ((buffer-read-only nil)
 	(omax (point-max))
 	(opoint (point)))
+    ;; Remove hooks to avoid errors due to dead process.
+    (remove-hook 'pre-command-hook #'term-set-goto-process-mark t)
+    (remove-hook 'post-command-hook #'term-goto-process-mark-maybe t)
     ;; Record where we put the message, so we can ignore it
     ;; later on.
     (goto-char omax)
@@ -2891,9 +2899,11 @@ See `term-prompt-regexp'."
                 ;; If the last char was written in last column,
                 ;; back up one column, but remember we did so.
                 ;; Thus we emulate xterm/vt100-style line-wrapping.
-                (cond ((eq (term-current-column) term-width)
-                       (term-move-columns -1)
-                       (setq term-do-line-wrapping t)))
+                (when (eq (term-current-column) term-width)
+                  (term-move-columns -1)
+                  ;; We check after ctrl sequence handling if point
+                  ;; was moved (and leave line-wrapping state if so).
+                  (setq term-do-line-wrapping (point)))
                 (setq term-current-column nil)
                 (setq i funny))
               (pcase-exhaustive (and (<= ctl-end str-length) (aref str i))
@@ -2993,6 +3003,9 @@ See `term-prompt-regexp'."
                      (substring str i ctl-end)))))
                 ;; Ignore NUL, Shift Out, Shift In.
                 ((or ?\0 #xE #xF 'nil) nil))
+              ;; Leave line-wrapping state if point was moved.
+              (unless (eq term-do-line-wrapping (point))
+                (setq term-do-line-wrapping nil))
               (if (term-handling-pager)
                   (progn
                     ;; Finish stuff to get ready to handle PAGER.
@@ -3643,7 +3656,7 @@ all pending output has been dealt with."))
   (let ((start-column (term-horizontal-column)))
     (when (and check-for-scroll (or term-scroll-with-delete term-pager-count))
       (setq down (term-handle-scroll down)))
-    (unless (and (= term-current-row 0) (< down 0))
+    (unless (and (= (term-current-row) 0) (< down 0))
       (term-adjust-current-row-cache down)
       (when (or (/= (point) (point-max)) (< down 0))
 	(setq down (- down (term-vertical-motion down)))))
@@ -3653,7 +3666,7 @@ all pending output has been dealt with."))
 	   (setq term-current-column 0)
 	   (setq term-start-line-column 0))
 	  (t
-	   (when (= term-current-row 0)
+	   (when (= (term-current-row) 0)
 	     ;; Insert lines if at the beginning.
 	     (save-excursion (term-insert-char ?\n (- down)))
 	     (save-excursion

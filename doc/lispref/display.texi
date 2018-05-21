@@ -1241,7 +1241,7 @@ displays the buffer specified by @var{buffer-or-name} @emph{before}
 running @var{body}.
 @end defmac
 
-A window showing a temporary buffer can be fit to the size of that
+A window showing a temporary buffer can be fitted to the size of that
 buffer using the following mode:
 
 @defopt temp-buffer-resize-mode
@@ -1274,7 +1274,7 @@ positive integer.  At the time the function is called, the window to be
 resized is selected.
 @end defopt
 
-The following function uses the current buffer for temporal display:
+The following function uses the current buffer for temporary display:
 
 @defun momentary-string-display string position &optional char message
 This function momentarily displays @var{string} in the current buffer at
@@ -5387,7 +5387,6 @@ hint to ImageMagick to help it detect the image type.
 Specifies a rotation angle in degrees.
 
 @item :index @var{frame}
-@c Doesn't work: https://debbugs.gnu.org/7978
 @xref{Multi-Frame Images}.
 @end table
 
@@ -5396,8 +5395,8 @@ Specifies a rotation angle in degrees.
 @cindex SVG images
 
 SVG (Scalable Vector Graphics) is an XML format for specifying images.
-If your Emacs build has with SVG support, you can create and manipulate
-these images with the following commands.
+If your Emacs build has SVG support, you can create and manipulate
+these images with the following functions.
 
 @defun svg-create width height &rest args
 Create a new, empty SVG image with the specified dimensions.
@@ -5411,7 +5410,7 @@ The default width (in pixels) of any lines created.
 The default stroke color on any lines created.
 @end table
 
-This function returns an SVG structure, and all the following commands
+This function returns an SVG structure, and all the following functions
 work on that structure.
 @end defun
 
@@ -6969,7 +6968,7 @@ The glyph for the end of a truncated screen line (the default for this
 is @samp{$}).  @xref{Glyphs}.  On graphical terminals, Emacs by
 default uses arrows in the fringes to indicate truncation, so the
 display table has no effect, unless you disable the fringes
-(@pxref{Fringes,, Window Fringes, emacs, the Gnu Emacs Manual}).
+(@pxref{Fringes,, Window Fringes, emacs, the GNU Emacs Manual}).
 
 @item 1
 The glyph for the end of a continued line (the default is @samp{\}).
@@ -7236,8 +7235,8 @@ Characters of Unicode General Category [Cf], such as @samp{U+200E}
 images, such as @samp{U+00AD} (Soft Hyphen).
 
 @item no-font
-Characters for there is no suitable font, or which cannot be encoded
-by the terminal's coding system.
+Characters for which there is no suitable font, or which cannot be
+encoded by the terminal's coding system.
 @end table
 
 @c FIXME: this can also be 'acronym', but that's not currently

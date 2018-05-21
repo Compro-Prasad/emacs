@@ -523,18 +523,34 @@ pointer_align (void *ptr, int alignment)
   return (void *) ROUNDUP ((uintptr_t) ptr, alignment);
 }
 
-/* Extract the pointer hidden within O.  Define this as a function, as
-   functions are cleaner and can be used in debuggers.  Also, define
-   it as a macro if being compiled with GCC without optimization, for
-   performance in that case.  macro_XPNTR is private to this section
-   of code.  */
+/* Define PNTR_ADD and XPNTR as functions, which are cleaner and can
+   be used in debuggers.  Also, define them as macros if
+   DEFINE_KEY_OPS_AS_MACROS, for performance in that case.
+   The macro_* macros are private to this section of code.  */
+
+/* Add a pointer P to an integer I without gcc -fsanitize complaining
+   about the result being out of range of the underlying array.  */
+
+#define macro_PNTR_ADD(p, i) ((p) + (i))
+
+static char * ATTRIBUTE_NO_SANITIZE_UNDEFINED ATTRIBUTE_UNUSED
+PNTR_ADD (char *p, EMACS_UINT i)
+{
+  return macro_PNTR_ADD (p, i);
+}
+
+#if DEFINE_KEY_OPS_AS_MACROS
+# define PNTR_ADD(p, i) macro_PNTR_ADD (p, i)
+#endif
+
+/* Extract the pointer hidden within O.  */
 
 #define macro_XPNTR(o)                                                 \
   ((void *) \
    (SYMBOLP (o)							       \
-    ? ((char *) lispsym						       \
-       - ((EMACS_UINT) Lisp_Symbol << (USE_LSB_TAG ? 0 : VALBITS))     \
-       + XLI (o))						       \
+    ? PNTR_ADD ((char *) lispsym,				       \
+		(XLI (o)						\
+		 - ((EMACS_UINT) Lisp_Symbol << (USE_LSB_TAG ? 0 : VALBITS)))) \
     : (char *) XLP (o) - (XLI (o) & ~VALMASK)))
 
 static ATTRIBUTE_UNUSED void *
@@ -3692,7 +3708,7 @@ struct marker_block
 static struct marker_block *marker_block;
 static int marker_block_index = MARKER_BLOCK_SIZE;
 
-static union Lisp_Misc *marker_free_list;
+static union Lisp_Misc *misc_free_list;
 
 /* Return a newly allocated Lisp_Misc object of specified TYPE.  */
 
@@ -3703,10 +3719,10 @@ allocate_misc (enum Lisp_Misc_Type type)
 
   MALLOC_BLOCK_INPUT;
 
-  if (marker_free_list)
+  if (misc_free_list)
     {
-      XSETMISC (val, marker_free_list);
-      marker_free_list = marker_free_list->u_free.chain;
+      XSETMISC (val, misc_free_list);
+      misc_free_list = misc_free_list->u_free.chain;
     }
   else
     {
@@ -3738,8 +3754,8 @@ void
 free_misc (Lisp_Object misc)
 {
   XMISCANY (misc)->type = Lisp_Misc_Free;
-  XMISC (misc)->u_free.chain = marker_free_list;
-  marker_free_list = XMISC (misc);
+  XMISC (misc)->u_free.chain = misc_free_list;
+  misc_free_list = XMISC (misc);
   consing_since_gc -= sizeof (union Lisp_Misc);
   total_free_markers++;
 }
@@ -3907,15 +3923,6 @@ build_marker (struct buffer *buf, ptrdiff_t charpos, ptrdiff_t bytepos)
   m->next = BUF_MARKERS (buf);
   BUF_MARKERS (buf) = m;
   return obj;
-}
-
-/* Put MARKER back on the free list after using it temporarily.  */
-
-void
-free_marker (Lisp_Object marker)
-{
-  unchain_marker (XMARKER (marker));
-  free_misc (marker);
 }
 
 
@@ -5190,7 +5197,11 @@ mark_memory (void *start, void *end)
   for (pp = start; (void *) pp < end; pp += GC_POINTER_ALIGNMENT)
     {
       mark_maybe_pointer (*(void **) pp);
-      mark_maybe_object (*(Lisp_Object *) pp);
+
+      verify (alignof (Lisp_Object) % GC_POINTER_ALIGNMENT == 0);
+      if (alignof (Lisp_Object) == GC_POINTER_ALIGNMENT
+	  || (uintptr_t) pp % alignof (Lisp_Object) == 0)
+	mark_maybe_object (*(Lisp_Object *) pp);
     }
 }
 
@@ -6502,11 +6513,7 @@ mark_glyph_matrix (struct glyph_matrix *matrix)
       }
 }
 
-/* Mark reference to a Lisp_Object.
-   If the object referred to has not been seen yet, recursively mark
-   all the references contained in it.  */
-
-#define LAST_MARKED_SIZE 500
+enum { LAST_MARKED_SIZE = 1 << 9 }; /* Must be a power of 2.  */
 Lisp_Object last_marked[LAST_MARKED_SIZE] EXTERNALLY_VISIBLE;
 static int last_marked_index;
 
@@ -6653,12 +6660,8 @@ mark_localized_symbol (struct Lisp_Symbol *ptr)
 {
   struct Lisp_Buffer_Local_Value *blv = SYMBOL_BLV (ptr);
   Lisp_Object where = blv->where;
-  /* If the value is set up for a killed buffer or deleted
-     frame, restore its global binding.  If the value is
-     forwarded to a C variable, either it's not a Lisp_Object
-     var, or it's staticpro'd already.  */
-  if ((BUFFERP (where) && !BUFFER_LIVE_P (XBUFFER (where)))
-      || (FRAMEP (where) && !FRAME_LIVE_P (XFRAME (where))))
+  /* If the value is set up for a killed buffer restore its global binding.  */
+  if ((BUFFERP (where) && !BUFFER_LIVE_P (XBUFFER (where))))
     swap_in_global_binding (ptr);
   mark_object (blv->where);
   mark_object (blv->valcell);
@@ -6808,8 +6811,7 @@ mark_object (Lisp_Object arg)
     return;
 
   last_marked[last_marked_index++] = obj;
-  if (last_marked_index == LAST_MARKED_SIZE)
-    last_marked_index = 0;
+  last_marked_index &= LAST_MARKED_SIZE - 1;
 
   /* Perform some sanity checks on the objects marked here.  Abort if
      we encounter an object we know is bogus.  This increases GC time
@@ -7434,7 +7436,7 @@ sweep_misc (void)
   /* Put all unmarked misc's on free list.  For a marker, first
      unchain it from the buffer it points into.  */
 
-  marker_free_list = 0;
+  misc_free_list = 0;
 
   for (mblk = marker_block; mblk; mblk = *mprev)
     {
@@ -7446,7 +7448,9 @@ sweep_misc (void)
           if (!mblk->markers[i].m.u_any.gcmarkbit)
             {
               if (mblk->markers[i].m.u_any.type == Lisp_Misc_Marker)
-                unchain_marker (&mblk->markers[i].m.u_marker);
+                /* Make sure markers have been unchained from their buffer
+                   in sweep_buffer before we collect them.  */
+                eassert (!mblk->markers[i].m.u_marker.buffer);
               else if (mblk->markers[i].m.u_any.type == Lisp_Misc_Finalizer)
                 unchain_finalizer (&mblk->markers[i].m.u_finalizer);
 #ifdef HAVE_MODULES
@@ -7461,8 +7465,8 @@ sweep_misc (void)
                  We could leave the type alone, since nobody checks it,
                  but this might catch bugs faster.  */
               mblk->markers[i].m.u_marker.type = Lisp_Misc_Free;
-              mblk->markers[i].m.u_free.chain = marker_free_list;
-              marker_free_list = &mblk->markers[i].m;
+              mblk->markers[i].m.u_free.chain = misc_free_list;
+              misc_free_list = &mblk->markers[i].m;
               this_free++;
             }
           else
@@ -7479,7 +7483,7 @@ sweep_misc (void)
         {
           *mprev = mblk->next;
           /* Unhook from the free list.  */
-          marker_free_list = mblk->markers[0].m.u_free.chain;
+          misc_free_list = mblk->markers[0].m.u_free.chain;
           lisp_free (mblk);
         }
       else
@@ -7491,6 +7495,23 @@ sweep_misc (void)
 
   total_markers = num_used;
   total_free_markers = num_free;
+}
+
+/* Remove BUFFER's markers that are due to be swept.  This is needed since
+   we treat BUF_MARKERS and markers's `next' field as weak pointers.  */
+static void
+unchain_dead_markers (struct buffer *buffer)
+{
+  struct Lisp_Marker *this, **prev = &BUF_MARKERS (buffer);
+
+  while ((this = *prev))
+    if (this->gcmarkbit)
+      prev = &this->next;
+    else
+      {
+        this->buffer = NULL;
+        *prev = this->next;
+      }
 }
 
 NO_INLINE /* For better stack traces */
@@ -7512,6 +7533,7 @@ sweep_buffers (void)
           XUNMARK_VECTOR (buffer);
         /* Do not use buffer_(set|get)_intervals here.  */
         buffer->text->intervals = balance_intervals (buffer->text->intervals);
+        unchain_dead_markers (buffer);
         total_buffers++;
         bprev = &buffer->next;
       }
@@ -7527,8 +7549,8 @@ gc_sweep (void)
   sweep_floats ();
   sweep_intervals ();
   sweep_symbols ();
-  sweep_misc ();
   sweep_buffers ();
+  sweep_misc ();
   sweep_vectors ();
   pdumper_clear_marks ();
   check_string_bytes (!noninteractive);

@@ -729,13 +729,6 @@
   "Emacs interface to version control systems."
   :group 'tools)
 
-(defcustom vc-initial-comment nil
-  "If non-nil, prompt for initial comment when a file is registered."
-  :type 'boolean
-  :group 'vc)
-
-(make-obsolete-variable 'vc-initial-comment "it has no effect." "23.2")
-
 (defcustom vc-checkin-switches nil
   "A string or list of strings specifying extra switches for checkin.
 These are passed to the checkin program by \\[vc-checkin]."
@@ -1648,11 +1641,6 @@ to override the value of `vc-diff-switches' and `diff-switches'."
       ;; This is so we can set vc-diff-switches to t to override
       ;; any switches in diff-switches.
       (when (listp switches) switches))))
-
-;; Old def for compatibility with Emacs-21.[123].
-(defmacro vc-diff-switches-list (backend)
-  (declare (obsolete vc-switches "22.1"))
-  `(vc-switches ',backend 'diff))
 
 (defun vc-diff-finish (buffer messages)
   ;; The empty sync output case has already been handled, so the only

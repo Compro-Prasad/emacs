@@ -66,7 +66,7 @@
   (when (< #x1fffffff most-positive-fixnum)
     (should (= (mod-test-sum 1 #x1fffffff)
                (1+ #x1fffffff)))
-    (should (= (mod-test-sum -1 #x20000000)
+    (should (= (mod-test-sum -1 (1+ #x1fffffff))
                #x1fffffff)))
   (should-error (mod-test-sum 1 most-positive-fixnum)
                 :type 'overflow-error)
@@ -138,8 +138,9 @@ changes."
 
 (defun multiply-string (s n)
   (let ((res ""))
-    (dotimes (i n res)
-      (setq res (concat res s)))))
+    (dotimes (i n)
+      (setq res (concat res s)))
+    res))
 
 (ert-deftest mod-test-globref-make-test ()
   (let ((mod-str (mod-test-globref-make))

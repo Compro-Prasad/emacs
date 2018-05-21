@@ -324,7 +324,7 @@ message and scan line."
       ;; message in your +outbox, and best of all doesn't break threading for
       ;; the recipient if you reply to a message in your +outbox.
       (setq mh-send-args (concat "-msgid " mh-send-args))
-      ;; The default BCC encapsulation will make a MIME message unreadable.
+      ;; The default Bcc encapsulation will make a MIME message unreadable.
       ;; With nmh use the -mime arg to prevent this.
       (if (and (mh-variant-p 'nmh)
                (mh-goto-header-field "Bcc:")
@@ -1056,6 +1056,7 @@ letter."
 (defun mh-insert-x-mailer ()
   "Append an X-Mailer field to the header.
 The versions of MH-E, Emacs, and MH are shown."
+  (or mh-variant-in-use (mh-variant-set mh-variant))
   ;; Lazily initialize mh-x-mailer-string.
   (when (and mh-insert-x-mailer-flag (null mh-x-mailer-string))
     (setq mh-x-mailer-string

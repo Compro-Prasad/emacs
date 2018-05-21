@@ -902,7 +902,7 @@ Two differences:
   (viper-setup-ESC-to-escape t)
 
   (add-hook 'change-major-mode-hook #'viper-major-mode-change-sentinel)
-  (add-hook 'find-file-hooks #'set-viper-state-in-major-mode)
+  (add-hook 'find-file-hook #'set-viper-state-in-major-mode)
 
   ;; keep this because many modes we don't know about use this hook
   (defvar text-mode-hook)
@@ -937,8 +937,13 @@ Two differences:
     (if (and (eq viper-current-state 'vi-state)
 	     ;; Do not use called-interactively-p here. XEmacs does not have it
 	     ;; and interactive-p is just fine.
-	     ;; (called-interactively-p 'interactive))
-	     (interactive-p))
+             (if (featurep 'xemacs)
+                 (interactive-p)
+               ;; Respect the spirit of the above comment, though it
+               ;; seems pointless, since XE doesn't have advice-add or
+               ;; lexical binding or any other of the newer features
+               ;; this file uses.
+               (called-interactively-p 'interactive)))
 	(beep 1)
       (apply orig-fun args))))
 

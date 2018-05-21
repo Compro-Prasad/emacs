@@ -81,7 +81,7 @@
   (progn
     (require 'font-lock)
     (let (font-lock-keywords)
-      (font-lock-compile-keywords '("\\<\\>"))
+      (font-lock-compile-keywords '("a\\`")) ; doesn't match anything.
       font-lock-keywords))))
 
 
@@ -219,6 +219,7 @@ one of the following symbols:
 
 `bol'   -- beginning of line
 `eol'   -- end of line
+`eoll'  -- end of logical line (i.e. without escaped NL)
 `bod'   -- beginning of defun
 `eod'   -- end of defun
 `boi'   -- beginning of indentation
@@ -253,6 +254,16 @@ to it is returned.  This function does not modify the point or the mark."
 	       ,@(if point `((goto-char ,point)))
 	       (end-of-line)
 	       (point))))
+
+	 ((eq position 'eoll)
+	  `(save-excursion
+	     ,@(if point `((goto-char ,point)))
+	     (while (progn
+		      (end-of-line)
+		      (prog1 (eq (logand 1 (skip-chars-backward "\\\\")) 1)))
+	       (beginning-of-line 2))
+	     (end-of-line)
+	     (point)))
 
 	 ((eq position 'boi)
 	  `(save-excursion
@@ -452,6 +463,13 @@ to it is returned.  This function does not modify the point or the mark."
   (if (fboundp 'int-to-char)
       `(int-to-char ,integer)
     integer))
+
+(defmacro c-characterp (arg)
+  ;; Return t when ARG is a character (XEmacs) or integer (Emacs), otherwise
+  ;; return nil.
+  (if (integerp ?c)
+      `(integerp ,arg)
+    `(characterp ,arg)))
 
 (defmacro c-last-command-char ()
   ;; The last character just typed.  Note that `last-command-event' exists in
@@ -1247,7 +1265,7 @@ remains unchanged."
 				     -char-))
 			    (delete-extent ext)))
 		      nil ,from ,to ,value nil -property-))
-    ;; Gnu Emacs
+    ;; GNU Emacs
     `(c-clear-char-property-with-value-on-char-function ,from ,to ,property
 							,value ,char)))
 
@@ -1775,10 +1793,10 @@ when it's needed.  The default is the current language taken from
 	      (t
 	       re)))
 
-    ;; Produce a regexp that matches nothing.
+    ;; Produce a regexp that doesn't match anything.
     (if adorn
-	"\\(\\<\\>\\)"
-      "\\<\\>")))
+	"\\(a\\`\\)"
+      "a\\`")))
 
 (put 'c-make-keywords-re 'lisp-indent-function 1)
 

@@ -62,6 +62,7 @@
 ;; * ".lzh", ".LZH" - Microsoft Windows compressed LHA archives
 ;; * ".msu", ".MSU" - Microsoft Windows Update packages
 ;; * ".mtree" - BSD mtree format
+;; * ".odb" ".odf" ".odg" ".odp" ".ods" ".odt" - OpenDocument formats
 ;; * ".pax" - Posix archives
 ;; * ".rar" - RAR archives
 ;; * ".rpm" - Red Hat packages
@@ -106,6 +107,7 @@
 
 ;;; Code:
 
+(eval-when-compile (require 'cl-lib))
 (require 'tramp-gvfs)
 
 (autoload 'dired-uncache "dired")
@@ -115,7 +117,7 @@
 (defvar url-tramp-protocols)
 
 ;; We cannot check `tramp-gvfs-enabled' in loaddefs.el, because this
-;; would load Tramp. So we make a cheaper check.
+;; would load Tramp.  So we make a cheaper check.
 ;;;###autoload
 (defvar tramp-archive-enabled (featurep 'dbusbind)
   "Non-nil when file archive support is available.")
@@ -126,9 +128,9 @@
 ;; <https://github.com/libarchive/libarchive/wiki/LibarchiveFormats>
 ;;;###autoload
 (defconst tramp-archive-suffixes
-  ;; "cab", "lzh" and "zip" are included with lower and upper letters,
-  ;; because Microsoft Windows provides them often with capital
-  ;; letters.
+  ;; "cab", "lzh", "msu" and "zip" are included with lower and upper
+  ;; letters, because Microsoft Windows provides them often with
+  ;; capital letters.
   '("7z" ;; 7-Zip archives.
     "apk" ;; Android package kits.  Not in libarchive testsuite.
     "ar" ;; UNIX archiver formats.
@@ -142,6 +144,7 @@
     "lzh" "LZH" ;; Microsoft Windows compressed LHA archives.
     "msu" "MSU" ;; Microsoft Windows Update packages.  Not in testsuite.
     "mtree" ;; BSD mtree format.
+    "odb" "odf" "odg" "odp" "ods" "odt" ;; OpenDocument formats.  Not in testsuite.
     "pax" ;; Posix archives.
     "rar" ;; RAR archives.
     "rpm" ;; Red Hat packages.
@@ -299,27 +302,33 @@ pass to the OPERATION."
   "Invoke the file archive related OPERATION.
 First arg specifies the OPERATION, second arg is a list of arguments to
 pass to the OPERATION."
-  (let* ((filename (apply 'tramp-archive-file-name-for-operation
-			  operation args))
-	 (archive (tramp-archive-file-name-archive filename)))
-    ;; The file archive could be a directory, see Bug#30293.
-    (if (and archive
-	     (tramp-archive-run-real-handler 'file-directory-p (list archive)))
-	(tramp-archive-run-real-handler operation args)
-      ;; Now run the handler.
-      (unless tramp-archive-enabled
-	(tramp-compat-user-error nil "Package `tramp-archive' not supported"))
-      (let ((tramp-methods (cons `(,tramp-archive-method) tramp-methods))
-	    (tramp-gvfs-methods tramp-archive-all-gvfs-methods)
-	    ;; Set uid and gid.  gvfsd-archive could do it, but it doesn't.
-	    (tramp-unknown-id-integer (user-uid))
-	    (tramp-unknown-id-string (user-login-name))
-	    (fn (assoc operation tramp-archive-file-name-handler-alist)))
-	(when (eq (cdr fn) 'tramp-archive-handle-not-implemented)
-	  (setq args (cons operation args)))
-	(if fn
-	    (save-match-data (apply (cdr fn) args))
-	  (tramp-archive-run-real-handler operation args))))))
+    (if (not tramp-archive-enabled)
+        ;; Unregister `tramp-archive-file-name-handler'.
+        (progn
+          (tramp-register-file-name-handlers)
+          (tramp-archive-run-real-handler operation args))
+
+      (let* ((filename (apply 'tramp-archive-file-name-for-operation
+			      operation args))
+	     (archive (tramp-archive-file-name-archive filename)))
+
+        ;; The file archive could be a directory, see Bug#30293.
+        (if (and archive
+	         (tramp-archive-run-real-handler
+                  'file-directory-p (list archive)))
+            (tramp-archive-run-real-handler operation args)
+          ;; Now run the handler.
+          (let ((tramp-methods (cons `(,tramp-archive-method) tramp-methods))
+	        (tramp-gvfs-methods tramp-archive-all-gvfs-methods)
+	        ;; Set uid and gid.  gvfsd-archive could do it, but it doesn't.
+	        (tramp-unknown-id-integer (user-uid))
+	        (tramp-unknown-id-string (user-login-name))
+	        (fn (assoc operation tramp-archive-file-name-handler-alist)))
+	    (when (eq (cdr fn) 'tramp-archive-handle-not-implemented)
+	      (setq args (cons operation args)))
+	    (if fn
+	        (save-match-data (apply (cdr fn) args))
+	      (tramp-archive-run-real-handler operation args)))))))
 
 ;;;###autoload
 (progn (defun tramp-register-archive-file-name-handler ()
@@ -395,7 +404,7 @@ hexified archive name as host, and the localname.  The archive
 name is kept in slot `hop'"
   (save-match-data
     (unless (tramp-archive-file-name-p name)
-      (tramp-compat-user-error nil "Not an archive file name: \"%s\"" name))
+      (tramp-user-error nil "Not an archive file name: \"%s\"" name))
     (let* ((localname (tramp-archive-file-name-localname name))
 	   (archive (file-truename (tramp-archive-file-name-archive name)))
 	   (vec (make-tramp-file-name

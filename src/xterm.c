@@ -361,17 +361,12 @@ x_begin_cr_clip (struct frame *f, GC gc)
 
       if (! FRAME_CR_SURFACE (f))
         {
-          cairo_surface_t *surface;
-          surface = cairo_xlib_surface_create (FRAME_X_DISPLAY (f),
-                                               FRAME_X_DRAWABLE (f),
-                                               FRAME_DISPLAY_INFO (f)->visual,
-                                               FRAME_PIXEL_WIDTH (f),
-                                               FRAME_PIXEL_HEIGHT (f));
-          cr = cairo_create (surface);
-          cairo_surface_destroy (surface);
-        }
-      else
-        cr = cairo_create (FRAME_CR_SURFACE (f));
+	  FRAME_CR_SURFACE (f) =
+	    cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+					FRAME_PIXEL_WIDTH (f),
+					FRAME_PIXEL_HEIGHT (f));
+	}
+      cr = cairo_create (FRAME_CR_SURFACE (f));
       FRAME_CR_CONTEXT (f) = cr;
     }
   cairo_save (cr);
@@ -1235,32 +1230,24 @@ x_update_end (struct frame *f)
 #ifdef USE_CAIRO
   if (FRAME_CR_SURFACE (f))
     {
-      cairo_t *cr = 0;
-      block_input();
-#if defined (USE_GTK) && defined (HAVE_GTK3)
-      if (FRAME_GTK_WIDGET (f))
-        {
-          GdkWindow *w = gtk_widget_get_window (FRAME_GTK_WIDGET (f));
-          cr = gdk_cairo_create (w);
-        }
-      else
-#endif
-        {
-          cairo_surface_t *surface;
-          int width = FRAME_PIXEL_WIDTH (f);
-          int height = FRAME_PIXEL_HEIGHT (f);
-          if (! FRAME_EXTERNAL_TOOL_BAR (f))
-            height += FRAME_TOOL_BAR_HEIGHT (f);
-          if (! FRAME_EXTERNAL_MENU_BAR (f))
-            height += FRAME_MENU_BAR_HEIGHT (f);
-          surface = cairo_xlib_surface_create (FRAME_X_DISPLAY (f),
-                                               FRAME_X_DRAWABLE (f),
-                                               FRAME_DISPLAY_INFO (f)->visual,
-                                               width,
-                                               height);
-          cr = cairo_create (surface);
-          cairo_surface_destroy (surface);
-        }
+      cairo_t *cr;
+      cairo_surface_t *surface;
+      int width, height;
+
+      block_input ();
+      width = FRAME_PIXEL_WIDTH (f);
+      height = FRAME_PIXEL_HEIGHT (f);
+      if (! FRAME_EXTERNAL_TOOL_BAR (f))
+	height += FRAME_TOOL_BAR_HEIGHT (f);
+      if (! FRAME_EXTERNAL_MENU_BAR (f))
+	height += FRAME_MENU_BAR_HEIGHT (f);
+      surface = cairo_xlib_surface_create (FRAME_X_DISPLAY (f),
+					   FRAME_X_DRAWABLE (f),
+					   FRAME_DISPLAY_INFO (f)->visual,
+					   width,
+					   height);
+      cr = cairo_create (surface);
+      cairo_surface_destroy (surface);
 
       cairo_set_source_surface (cr, FRAME_CR_SURFACE (f), 0, 0);
       cairo_paint (cr);
@@ -3708,33 +3695,53 @@ x_draw_glyph_string (struct glyph_string *s)
               else
                 {
 		  struct font *font = font_for_underline_metrics (s);
+		  unsigned long minimum_offset;
+		  bool underline_at_descent_line;
+		  bool use_underline_position_properties;
+		  Lisp_Object val
+		    = buffer_local_value (Qunderline_minimum_offset,
+					  s->w->contents);
+		  if (INTEGERP (val))
+		    minimum_offset = XFASTINT (val);
+		  else
+		    minimum_offset = 1;
+		  val = buffer_local_value (Qx_underline_at_descent_line,
+					    s->w->contents);
+		  underline_at_descent_line
+		    = !(NILP (val) || EQ (val, Qunbound));
+		  val
+		    = buffer_local_value (Qx_use_underline_position_properties,
+					  s->w->contents);
+		  use_underline_position_properties
+		    = !(NILP (val) || EQ (val, Qunbound));
 
                   /* Get the underline thickness.  Default is 1 pixel.  */
                   if (font && font->underline_thickness > 0)
                     thickness = font->underline_thickness;
                   else
                     thickness = 1;
-                  if (x_underline_at_descent_line)
+                  if (underline_at_descent_line)
                     position = (s->height - thickness) - (s->ybase - s->y);
                   else
                     {
-                      /* Get the underline position.  This is the recommended
-                         vertical offset in pixels from the baseline to the top of
-                         the underline.  This is a signed value according to the
+                      /* Get the underline position.  This is the
+                         recommended vertical offset in pixels from
+                         the baseline to the top of the underline.
+                         This is a signed value according to the
                          specs, and its default is
 
                          ROUND ((maximum descent) / 2), with
                          ROUND(x) = floor (x + 0.5)  */
 
-                      if (x_use_underline_position_properties
+                      if (use_underline_position_properties
                           && font && font->underline_position >= 0)
                         position = font->underline_position;
                       else if (font)
                         position = (font->descent + 1) / 2;
                       else
-                        position = underline_minimum_offset;
+                        position = minimum_offset;
                     }
-                  position = max (position, underline_minimum_offset);
+                  position = max (position, minimum_offset);
                 }
               /* Check the sanity of thickness and position.  We should
                  avoid drawing underline out of the current line area.  */
@@ -4252,7 +4259,29 @@ x_scroll_run (struct window *w, struct run *run)
   x_clear_cursor (w);
 
 #ifdef USE_CAIRO
-  SET_FRAME_GARBAGED (f);
+  if (FRAME_CR_CONTEXT (f))
+    {
+      int wx = WINDOW_LEFT_EDGE_X (w);
+      cairo_surface_t *s = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+						       width, height);
+      cairo_t *cr = cairo_create (s);
+      cairo_set_source_surface (cr, cairo_get_target (FRAME_CR_CONTEXT (f)),
+				-x, -from_y);
+      cairo_paint (cr);
+      cairo_destroy (cr);
+
+      cr = FRAME_CR_CONTEXT (f);
+      cairo_save (cr);
+      cairo_set_source_surface (cr, s, wx, to_y);
+      cairo_rectangle (cr, wx, to_y, width, height);
+      cairo_fill (cr);
+      cairo_restore (cr);
+      cairo_surface_destroy (s);
+    }
+  else
+    {
+      SET_FRAME_GARBAGED (f);
+    }
 #else
   XCopyArea (FRAME_X_DISPLAY (f),
              FRAME_X_DRAWABLE (f), FRAME_X_DRAWABLE (f),
@@ -11532,7 +11561,8 @@ x_make_frame_visible (struct frame *f)
     poll_for_input_1 ();
     poll_suppress_count = old_poll_suppress_count;
 #endif
-    x_wait_for_event (f, MapNotify);
+    if (! FRAME_VISIBLE_P (f))
+      x_wait_for_event (f, MapNotify);
   }
 }
 
@@ -12403,11 +12433,15 @@ x_term_init (Lisp_Object display_name, char *xrm_option, char *resource_name)
         unrequest_sigio (); /* See comment in x_display_ok.  */
         gtk_init (&argc, &argv2);
         request_sigio ();
-        fixup_locale ();
 
         g_log_remove_handler ("GLib", id);
 
         xg_initialize ();
+
+	/* Do this after the call to xg_initialize, because when
+	   Fontconfig is used, xg_initialize calls its initialization
+	   function which in some versions of Fontconfig calls setlocale.  */
+	fixup_locale ();
 
         dpy = DEFAULT_GDK_DISPLAY ();
 
@@ -13248,6 +13282,8 @@ UNDERLINE_POSITION font properties, set this to nil.  You can also use
 `underline-minimum-offset' to override the font's UNDERLINE_POSITION for
 small font display sizes.  */);
   x_use_underline_position_properties = true;
+  DEFSYM (Qx_use_underline_position_properties,
+	  "x-use-underline-position-properties");
 
   DEFVAR_BOOL ("x-underline-at-descent-line",
 	       x_underline_at_descent_line,
@@ -13258,6 +13294,7 @@ A value of nil means to draw the underline according to the value of the
 variable `x-use-underline-position-properties', which is usually at the
 baseline level.  The default value is nil.  */);
   x_underline_at_descent_line = false;
+  DEFSYM (Qx_underline_at_descent_line, "x-underline-at-descent-line");
 
   DEFVAR_BOOL ("x-mouse-click-focus-ignore-position",
 	       x_mouse_click_focus_ignore_position,

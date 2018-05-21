@@ -263,6 +263,8 @@ See `comint-preinput-scroll-to-bottom'.  This variable is buffer-local."
 		 (const this))
   :group 'comint)
 
+(defvaralias 'comint-scroll-to-bottom-on-output 'comint-move-point-for-output)
+
 (defcustom comint-move-point-for-output nil
   "Controls whether interpreter output moves point to the end of the output.
 If nil, then output never moves point to the output.
@@ -294,8 +296,6 @@ end of the current logical (not visual) line after insertion."
   :type '(radio (const :tag "Stay after input" after-input)
                 (const :tag "Move to end of line" end-of-line))
   :group 'comint)
-
-(defvaralias 'comint-scroll-to-bottom-on-output 'comint-move-point-for-output)
 
 (defcustom comint-scroll-show-maximum-output t
   "Controls how to scroll due to interpreter output.
@@ -429,9 +429,6 @@ See `comint-send-input'."
   :type 'boolean
   :group 'comint)
 
-(define-obsolete-variable-alias 'comint-use-prompt-regexp-instead-of-fields
-  'comint-use-prompt-regexp "22.1")
-
 ;; Note: If it is decided to purge comint-prompt-regexp from the source
 ;; entirely, searching for uses of this variable will help to identify
 ;; places that need attention.
@@ -454,8 +451,8 @@ This is run before the process is cranked up."
   "Hook run each time a process is exec'd by `comint-exec'.
 This is called after the process is cranked up.  It is useful for things that
 must be done each time a process is executed in a Comint mode buffer (e.g.,
-`(process-kill-without-query)').  In contrast, the `comint-mode-hook' is only
-executed once when the buffer is created."
+`set-process-query-on-exit-flag').  In contrast, `comint-mode-hook' is only
+executed once, when the buffer is created."
   :type 'hook
   :group 'comint)
 
