@@ -2303,7 +2303,7 @@ static dump_off
 dump_blv (struct dump_context *ctx,
           const struct Lisp_Buffer_Local_Value *blv)
 {
-#if CHECK_STRUCTS && !defined (HASH_Lisp_Buffer_Local_Value_2B3BD67753)
+#if CHECK_STRUCTS && !defined (HASH_Lisp_Buffer_Local_Value_066F33A92E)
 # error "Lisp_Buffer_Local_Value changed. See CHECK_STRUCTS comment."
 #endif
   struct Lisp_Buffer_Local_Value out;
